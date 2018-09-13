@@ -1,0 +1,14 @@
+sudo apt install git
+sudo apt install build-essential
+sudo apt install cmake pkg-config
+sudo apt-get install libssl-dev
+sudo apt install libssh2-1-dev
+sudo apt-get install libghc-zlib-dev
+mkdir Stanford
+cd Stanford
+git clone https://github.com/rordenlab/dcm2niix.git
+cd dcm2niix
+mkdir build && cd build
+cmake -DZLIB_IMPLEMENTATION=Cloudflare -DUSE_JPEGLS=ON -DUSE_OPENJPEG=ON ..
+make
+
