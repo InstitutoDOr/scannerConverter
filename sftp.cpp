@@ -543,6 +543,7 @@ int sFTPGE::resetTries()
    lastCheck = 0;
    list.clear();
    lastList.clear();
+   return 0;
 }
 
 int sFTPGE::cleanUp()
