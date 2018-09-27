@@ -176,7 +176,8 @@ int sFTPGE::getFilelist(string &basedir, vector<fileObject>&list)
         {
            fileObject fileObj(mem);
            fileObj.time = attrs.mtime;
-           list.push_back(fileObj);
+           if (fileObj.isDicomFile())
+              list.push_back(fileObj);
         }
         else break;
     }

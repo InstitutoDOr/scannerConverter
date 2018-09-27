@@ -58,6 +58,19 @@ public:
    int fileIndex;
    double time;
    
+    int isDicomFile()
+    {
+        string::size_type idx;
+        idx = filename.rfind('.');
+        if (idx != std::string::npos)
+        {
+           string extension = filename.substr(idx+1);
+           transform(extension.begin(), extension.end(), extension.begin(), ::toupper);
+           return (extension == "DCM");
+        }
+        return 0;
+    }
+
     fileObject(char *file)
     {
        filename = file;
