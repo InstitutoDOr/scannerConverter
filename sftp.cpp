@@ -552,7 +552,7 @@ int sFTPGE::downloadFileList(string &outputdir)
                     
                     int volumeIndex = ((int)(t / d.locationsInAcquisition) + 1);
                     sprintf(outputname, "%s/vol_%.5d", outputdir.c_str(), volumeIndex);
-                    nii_saveNII(outputname, hdr, imgM, opts, d);
+                    nii_saveNII(outputname, hdr, imgM, opts);
                     nslices=0;
                     actualFileIndex=t+1;
                     fprintf(stderr, "Volume %d written.\n", volumeIndex);
@@ -759,7 +759,7 @@ int dicomConverter::checkVolumeStatus()
                 filemem.read((char *)img, imgsz);
                 if (filemem)
                 {
-                    memcpy(&imgM[(uint64_t)t*imgsz], &img[0], imgsz);
+                    memcpy(&imgM[(uint64_t)(nslices-t-1)*imgsz], &img[0], imgsz);
                     //fprintf(stderr, "Writing slice %d of volume %d\n", (t+1), volumeIndex);
                     sliceReady[t]=1;
                     lastRead = d;
@@ -781,7 +781,7 @@ int dicomConverter::convert2Nii(string outputdir)
    fprintf(stderr, "First Slice = %d\n", firstSliceIndex);
    fprintf(stderr, "Volume %d written.\n", volumeIndex);
    sprintf(outputname, "%s/vol_%.5d", outputdir.c_str(), volumeIndex);
-   nii_saveNII(outputname, hdr, imgM, opts, lastRead);
+   nii_saveNII(outputname, hdr, imgM, opts);
    firstSliceIndex+=nslices;
    volumeIndex++;
    resetFlag();
