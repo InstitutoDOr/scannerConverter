@@ -9,6 +9,7 @@
 
 #include "sftp.h"
 
+// get time in seconds
 double GetWallTime()
 {
 
@@ -25,6 +26,7 @@ double GetWallTime()
 #endif
 }
 
+// reset file stream
 void reset(stringstream& stream)
 {
     const static stringstream initial;
@@ -34,6 +36,7 @@ void reset(stringstream& stream)
     stream.copyfmt(initial);
 }
 
+//  not used rigth now
 static void kbd_callback(const char *name, int name_len, 
              const char *instruction, int instruction_len, int num_prompts,
              const LIBSSH2_USERAUTH_KBDINT_PROMPT *prompts,
@@ -82,17 +85,18 @@ static void kbd_callback(const char *name, int name_len,
         "Done. Sending keyboard-interactive responses to server now.\n");
 }
 
+// search for the latest dir inside a base folder
 string sFTPGE::latestDir(string &basedir)
 {
     unsigned long recentTime=0;
     int rc;
-    string latestExamDir="";
+    string newestDir="";
     /* Request a dir listing via SFTP */
     LIBSSH2_SFTP_HANDLE *sftp_handle = libssh2_sftp_opendir(sftp_session, basedir.c_str());
 
     if (!sftp_handle) {
         fprintf(stderr, "Unable to open dir with SFTP\n");
-        return latestExamDir;
+        return newestDir;
     }
 
     string latestDir;
@@ -106,7 +110,7 @@ string sFTPGE::latestDir(string &basedir)
                                      longentry, sizeof(longentry), &attrs);
         if (rc > 0)
         {
-           if ((attrs.mtime > recentTime) && (strcmp(mem, ".DS_Store")))
+           if ((attrs.mtime > recentTime) && (strcmp(mem, ".DS_Store")) && (strcmp(mem, ".")) && (strcmp(mem, "..")))
            {
               recentTime = attrs.mtime;
               latestDir = mem; 
@@ -117,26 +121,28 @@ string sFTPGE::latestDir(string &basedir)
 
     } 
     while (1);
+
     if (latestDir.size() > 0) 
     {
-       latestExamDir = basedir;
-       latestExamDir += "/";
-       latestExamDir += latestDir; 
+       newestDir = basedir;
+       newestDir += "/";
+       newestDir += latestDir; 
     }
     libssh2_sftp_closedir(sftp_handle);
-    return latestExamDir;
+    return newestDir;
 }
 
+// get the latest exam dir 
 string sFTPGE::latestSession(string &basedir)
 {
     string lastPatientDir;
     string latestExamDir;
     
-    // latest patient
+    // get latest patient folder from base dir
     //fprintf(stderr, "basedir = %s\n", basedir.c_str());
     lastPatientDir = latestDir(basedir);
 
-    // latest Session
+    // latest Session/study folder from patient dir
     latestExamDir = latestDir(lastPatientDir);
 
     //fprintf(stderr, "PatientDir = %s\n", lastPatientDir.c_str());
@@ -144,12 +150,14 @@ string sFTPGE::latestSession(string &basedir)
     return latestExamDir;
 }
 
+// get the latest serie dir from exame dir
 string sFTPGE::latestSerie(string &sessionDir)
 {
     string latestSerie = latestDir(sessionDir);
     return latestSerie;
 }
 
+// get a list of files from a directory
 int sFTPGE::getFilelist(string &basedir, vector<fileObject>&list)
 {
     int rc;
@@ -187,7 +195,8 @@ int sFTPGE::getFilelist(string &basedir, vector<fileObject>&list)
     return 0;
 }
 
-int sFTPGE::getFile(string &filepath, stringstream &filemem)
+// read a file from sFTP to memory
+int sFTPGE::getFile(string &filepath, stringstream &filemem, int showErrors)
 {
     /* Request a file via SFTP */
     int rc;
@@ -196,13 +205,16 @@ int sFTPGE::getFile(string &filepath, stringstream &filemem)
         libssh2_sftp_open(sftp_session, filepath.c_str(), LIBSSH2_FXF_READ, 0);
 
     if (!sftp_handle) {
-        int errmsg_len;
-        char *errmsg;
-        fprintf(stderr, "Unable to open file with SFTP: %ld\n",
+        if (showErrors)
+        {
+           int errmsg_len;
+           char *errmsg;
+           fprintf(stderr, "Unable to open file with SFTP: %ld\n",
                 libssh2_sftp_last_error(sftp_session));
                 
-        libssh2_session_last_error(session, &errmsg, &errmsg_len, 0); 
-        fprintf(stderr, "Error : %s\n", errmsg);
+           libssh2_session_last_error(session, &errmsg, &errmsg_len, 0); 
+           fprintf(stderr, "Error : %s\n", errmsg);
+        }
         return 1;
     }
     
@@ -223,14 +235,16 @@ int sFTPGE::getFile(string &filepath, stringstream &filemem)
     return 0;   
 }
 
+// save a file from memory stream to disk
 int sFTPGE::saveFile(string &filepath, stringstream &filemem)
 {
-   ofstream outFile(filepath);
+   ofstream outFile(filepath.c_str());
    outFile << filemem.rdbuf();
    outFile.close();
    return 0;
 }
 
+// init socket (just for Windows)
 int sFTPGE::initWinsock()
 {
 #ifdef WIN32
@@ -245,7 +259,8 @@ int sFTPGE::initWinsock()
 #endif
     return 0;
 }
- 
+
+// init libSSH environment
 int sFTPGE::initSSH()
 {
     int rc = libssh2_init (0);
@@ -253,11 +268,12 @@ int sFTPGE::initSSH()
         fprintf(stderr, "libssh2 initialization failed (%d)\n", rc);
         return 1;
     }
-    else fprintf(stderr, "initialized!\n");
+    else fprintf(stderr, "libssh initialized!\n");
     
     return 0;
 }
 
+// init socket variable
 int sFTPGE::initSock()
 {
     /*
@@ -271,7 +287,7 @@ int sFTPGE::initSock()
     sin.sin_addr.s_addr = hostaddr;
     if (connect(sock, (struct sockaddr*)(&sin),
                 sizeof(struct sockaddr_in)) != 0) {
-        fprintf(stderr, "failed to connect!\n");
+        fprintf(stderr, "failed to connect in socket level!\n");
         return -1;
     }
     else fprintf(stderr, "connected!\n");
@@ -279,8 +295,10 @@ int sFTPGE::initSock()
     return 0;
 }
 
+// prepare all related network stuff to initiate a ssh connection
 int sFTPGE::connectSession()
 {
+    connected = 0;
     initWinsock();
     initSSH();
     initSock();
@@ -290,6 +308,7 @@ int sFTPGE::connectSession()
     return 0;
 }
 
+// prepare all stuuf related to initiate a libssh session
 int sFTPGE::initSSHSession()
 {
     /* Create a session instance
@@ -370,6 +389,7 @@ int sFTPGE::initSSHSession()
     return 0;
 }
 
+// initiate de facto a sftp session
 int sFTPGE::initsFTPSession()
 {
     //fprintf(stderr, "libssh2_sftp_init()!\n");
@@ -382,15 +402,24 @@ int sFTPGE::initsFTPSession()
     
     /* Since we have not set non-blocking, tell libssh2 we are blocking */
     libssh2_session_set_blocking(session, 1);
+    connected = 1;
     return 0;
 }
 
+// return if the object successfully conected to the server
+int sFTPGE::isConnected()
+{
+   return connected;
+}
+
+// compares to list to indicate that new files arrived
 int sFTPGE::hasNewFiles()
 {
 //   fprintf(stderr, "Lista atual = %ld, Anterior = %ld\n", list.size(), lastList.size());
    return (list.size()-lastList.size());
 }
 
+// returns the latest exam/study dir not equal to the last vieweddd path
 int sFTPGE::getLatestExamDir()
 {
     string examDir = latestSession(sftppath);
@@ -406,12 +435,14 @@ int sFTPGE::getLatestExamDir()
     else return 0;
 }
 
+// verifies if we had a new series folder
 int sFTPGE::hasNewSeriesDir()
 {
 //   fprintf(stderr, "previousSerieDir = %s, actual = %s\n", previousSerieDir.c_str(), latestSerieDir.c_str());
    return (previousSerieDir != latestSerieDir);
 }
 
+// get the last series dir
 int sFTPGE::getLatestSeriesDir()
 {
     string seriesDir = latestSerie(latestExamDir);
@@ -425,6 +456,7 @@ int sFTPGE::getLatestSeriesDir()
     else return 0;
 }
 
+// get the file list of the current seriesDir
 int sFTPGE::getFileList()
 {
     double ini = GetWallTime();
@@ -436,6 +468,7 @@ int sFTPGE::getFileList()
     return 0;
 }
 
+// find the latest series dir
 int sFTPGE::findInputDir()
 {
    if (getLatestExamDir())
@@ -443,6 +476,7 @@ int sFTPGE::findInputDir()
    else return 0;
 }
 
+// converts a list of dicom slices in nifti format
 int sFTPGE::downloadFileList(string &outputdir)
 {
     double ini = GetWallTime();
@@ -464,32 +498,35 @@ int sFTPGE::downloadFileList(string &outputdir)
     opts.filename[0] = 0;
     opts.isGz = false;
 
-    for (int t=actualFileIndex; t<list.size(); t++)
+    // the file list is ordered by file index, so its ok to pass by list index.
+    for (int t=actualFileIndex; list.size(); t++)
     {
-        stringstream filemem;
-        string fname = latestSerieDir + "/" + list[t].filename;
-        if (getFile(fname, filemem)==0)
+        stringstream filemem; // memory stream that holds the file information
+        string fname = latestSerieDir + "/" + list[t].filename; // filename to retrieve
+        if (getFile(fname, filemem)==0) // getting the file from ssh
         {
             TDTI4D unused;
-            struct TDICOMdata d = readDICOMv(filemem, 0, 0, &unused);
-            if (t==actualFileIndex)
+            struct TDICOMdata d = readDICOMv(filemem, 0, 0, &unused); // read the file
+            if (t==actualFileIndex) // if first, get header and imgsize, numslices
             {
                 if (headerDcm2Nii(d, &hdr, true) != EXIT_FAILURE)
                 {
                     imgsz = nii_ImgBytes(hdr);
-                    //fprintf(stderr, "slice size=%ld numslices = %d\n", imgsz, d.locationsInAcquisition);
+                    nSlices = d.locationsInAcquisition;
+                    fprintf(stderr, "slice size=%ld numslices = %d\n", imgsz, d.locationsInAcquisition);
                     hdr.dim[3] = d.locationsInAcquisition;
                     for (int i = 4; i < 8; i++) hdr.dim[i] = 0;
                     imgM = (unsigned char *)malloc(imgsz* (uint64_t)d.locationsInAcquisition);
                     img = (unsigned char *)malloc(imgsz);
-                    nSlices = d.locationsInAcquisition;
                 }
             }
             
             if (imgsz > 0)
             {
-                //fprintf(stderr, "file read = %s\n", fname.c_str());
                 int i = t % d.locationsInAcquisition;
+                //fprintf(stderr, "index = %d file read = %s\n", i, fname.c_str());
+                // if the header do not inform the ImageStart, it will be file size minus the image size from previous calculations.
+                // image size did not change and there is no compression
                 if (d.imageStart == 0)
                 {
                     filemem.seekg(0, filemem.end);
@@ -497,31 +534,25 @@ int sFTPGE::downloadFileList(string &outputdir)
                     d.imageStart = fileLen-imgsz;
                 }
 
+                // reads image data to buffer
                 //fprintf(stderr, "Reading %ld bytes from %d\n", imgsz, d.imageStart); 
                 filemem.seekg(d.imageStart);
                 filemem.read((char *)img, imgsz);
                 if (filemem)
                 {
-                    memcpy(&imgM[(uint64_t)i*imgsz], &img[0], imgsz);
+                    memcpy(&imgM[(uint64_t)(d.locationsInAcquisition-i-1)*imgsz], &img[0], imgsz);
                     //fprintf(stderr, "Writing slice %d of volume %d\n", (i+1), ((int)(t / d.locationsInAcquisition) + 1));
                     nslices++;
                 }
                 
-//                if (nslices == 1)
-//                {
-//                    firstHeader = d;
-//                }
+                // if all slices in the deck, save the volume
                 if (nslices == d.locationsInAcquisition)
                 {
                     char outputname[1024];
-//                    sliceDir = headerDcm2Nii2(firstHeader, d, &hdr, true);
-//                    fprintf(stderr, "direction %d\n", sliceDir);
-//                    if (sliceDir < 0)
-//                        imgM = nii_flipZ(imgM, &hdr);
                     
                     int volumeIndex = ((int)(t / d.locationsInAcquisition) + 1);
                     sprintf(outputname, "%s/vol_%.5d", outputdir.c_str(), volumeIndex);
-                    nii_saveNII(outputname, hdr, imgM, opts);
+                    nii_saveNII(outputname, hdr, imgM, opts, d);
                     nslices=0;
                     actualFileIndex=t+1;
                     fprintf(stderr, "Volume %d written.\n", volumeIndex);
@@ -538,13 +569,23 @@ int sFTPGE::downloadFileList(string &outputdir)
     return 0;
 }
 
-int sFTPGE::resetTries()
+// convert the memory maintained list of read files to nifti 
+int sFTPGE::convertVolumes(string &outputdir)
 {
-   numberOfTries = 0;
-   lastCheck = 0;
-   list.clear();
-   lastList.clear();
-   return 0;
+    if (list.size() == 0) return 0;
+    if (firstVolume)
+    {
+       fprintf(stderr, "Setting the volume information\n");
+       //dConv.ge = this;
+       dConv.setFirstSliceName((char *)list[0].filename.c_str());
+       firstVolume = 0;
+    }
+    else 
+    {
+       if (dConv.checkVolumeStatus())
+          dConv.convert2Nii(outputdir);
+    }
+    return 0;
 }
 
 int sFTPGE::cleanUp()
@@ -552,19 +593,24 @@ int sFTPGE::cleanUp()
    resetTries();
    nSlices = 0;
    actualFileIndex = 0;
-   resetTries(); 
+   resetTries();
+   firstVolume = 1;
    return 0;
 }
 
+// verifies if its time to search for a new directory
 int sFTPGE::isTimeToEnd()
 {
+   // if no files
    if (!hasNewFiles())
    {
       if (lastCheck == 0)
          lastCheck = GetWallTime();
 
+      // and more than 1 second has passed 
       if (GetWallTime()-lastCheck > timeBetweenChecks)
       {
+         // increment the number of tries
          lastCheck = GetWallTime();
          numberOfTries++;   
       }
@@ -574,25 +620,32 @@ int sFTPGE::isTimeToEnd()
       numberOfTries = 0;
       lastCheck = 0;
    }
+   // if number of tries greater than maximumTries exit
    return numberOfTries > maximumTries; 
+}
+
+// resets tries checks
+int sFTPGE::resetTries()
+{
+   numberOfTries = 0;
+   lastCheck = 0;
+   list.clear();
+   lastList.clear();
+   return 0;
 }
 
 int sFTPGE::copyStep(string &outputdir)
 {
-   getFileList();
-   if ((hasNewFiles()) && (actualFileIndex+nSlices <= list.size()))
-      downloadFileList(outputdir);
+   if (firstVolume)
+   {
+      fprintf(stderr, "Reading file list\n"); 
+      getFileList();
+   }
+   convertVolumes(outputdir);
    return isTimeToEnd();
 }
 
-int sFTPGE::closeSession()
-{
-    closeSSH();
-    closeSock();
-    
-    return 0;
-}
-
+// closes the SSH session
 int sFTPGE::closeSSH()
 {
    libssh2_sftp_shutdown(sftp_session);
@@ -602,6 +655,7 @@ int sFTPGE::closeSSH()
    return 0;
 }
 
+// closes the socket variables
 int sFTPGE::closeSock()
 {
 #ifdef WIN32
@@ -614,3 +668,131 @@ int sFTPGE::closeSock()
     libssh2_exit();
     return 0;
 }
+
+// closes all types of connections (socket and ssh)
+int sFTPGE::closeSession()
+{
+   closeSSH();
+   closeSock();
+   return 0;
+}
+
+void dicomConverter::setFirstSliceName(char *filename)
+{
+   reset();
+   fileObject fo(filename);
+   fileTemplate = fo.fileTemplate;
+   firstSliceIndex = fo.fileIndex;
+   prepareVariables(); 
+}
+
+string dicomConverter::fileIndex(int index)
+{
+   string fname = ge->latestSerieDir + "/" + fileTemplate + to_string((int) index / 1000) + "." + to_string((int) index % 1000);
+   if (!noDCM)
+      fname = fname + ".dcm";
+   return fname;
+}
+
+void dicomConverter::resetFlag()
+{
+   for (int t=0;t < nslices; t++)
+      sliceReady[t] = 0;
+}
+
+void dicomConverter::prepareVariables()
+{
+   TDTI4D unused;
+   stringstream filemem;
+
+   string filename = fileIndex(firstSliceIndex);
+   if (ge->getFile(filename, filemem)==0)
+   {
+      struct TDICOMdata d = readDICOMv(filemem, 0, 0, &unused);
+      if (headerDcm2Nii(d, &hdr, true) != EXIT_FAILURE)
+      {
+         imgsz = nii_ImgBytes(hdr);
+         fprintf(stderr, "slice size=%ld numslices = %d\n", imgsz, d.locationsInAcquisition);
+         hdr.dim[3] = d.locationsInAcquisition;
+         for (int i = 4; i < 8; i++) hdr.dim[i] = 0;
+         imgM = (unsigned char *) malloc(imgsz* (uint64_t)d.locationsInAcquisition);
+         img  = (unsigned char *) malloc(imgsz);
+         nslices = d.locationsInAcquisition;
+         sliceReady = (int *) malloc(nslices * sizeof(int));
+         resetFlag();
+      }
+   }
+}
+
+int dicomConverter::checkVolumeStatus()
+{
+   int ready=1;
+   
+   if (nslices == 0)
+   {
+      prepareVariables();
+      ready=0;
+   } 
+   else
+   { 
+      stringstream filemem;
+
+      for (int t=0;t<nslices;t++)
+      {
+          if (sliceReady[t]==0)
+          {
+             string filename = fileIndex(firstSliceIndex+t);
+             //fprintf(stderr, "index = %d filename = %s \n", t, filename.c_str());
+             if (ge->getFile(filename, filemem, 0)==0)
+             {
+                TDTI4D unused;
+                struct TDICOMdata d = readDICOMv(filemem, 0, 0, &unused); // read the file
+                if (d.imageStart == 0)
+                {
+                    filemem.seekg(0, filemem.end);
+                    int fileLen=filemem.tellg(); //Get file length
+                    d.imageStart = fileLen-imgsz;
+                }
+
+                //fprintf(stderr, "Reading %ld bytes from %d\n", imgsz, d.imageStart); 
+                filemem.seekg(d.imageStart);
+                filemem.read((char *)img, imgsz);
+                if (filemem)
+                {
+                    memcpy(&imgM[(uint64_t)t*imgsz], &img[0], imgsz);
+                    //fprintf(stderr, "Writing slice %d of volume %d\n", (t+1), volumeIndex);
+                    sliceReady[t]=1;
+                    lastRead = d;
+                }
+                else ready=0;
+             }
+             else ready=0;
+          }
+          else ready=0;
+      }
+   }
+   return ready;
+}
+
+int dicomConverter::convert2Nii(string outputdir)
+{
+   char outputname[1024];
+
+   fprintf(stderr, "First Slice = %d\n", firstSliceIndex);
+   fprintf(stderr, "Volume %d written.\n", volumeIndex);
+   sprintf(outputname, "%s/vol_%.5d", outputdir.c_str(), volumeIndex);
+   nii_saveNII(outputname, hdr, imgM, opts, lastRead);
+   firstSliceIndex+=nslices;
+   volumeIndex++;
+   resetFlag();
+}
+
+void dicomConverter::reset()
+{
+   imgsz = 0;
+   free(imgM);
+   free(img);
+   free(sliceReady);
+   nslices = 0;
+}
+

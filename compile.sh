@@ -8,7 +8,7 @@
 
 g++ -w -O3 -DHAVE_ARPA_INET_H -DUSE_JPEGLS=ON -DmyDisableOpenJPEG \
      main.cpp sftp.cpp \
-     memoryDCM.cpp \
+     -I../dcm2niix/console \
      ../dcm2niix/console/ujpeg.cpp \
      ../dcm2niix/console/nii_dicom.cpp \
      ../dcm2niix/console/nii_dicom_batch.cpp \
@@ -16,6 +16,5 @@ g++ -w -O3 -DHAVE_ARPA_INET_H -DUSE_JPEGLS=ON -DmyDisableOpenJPEG \
      ../dcm2niix/console/nii_foreign.cpp \
      ../dcm2niix/console/nifti1_io_core.cpp \
      ../dcm2niix/console/jpg_0XC3.cpp \
-     -lssh2 -lssl -lz -lcrypto -o dicomFTP \
-     -I../dcm2niix/console \
-
+     memoryDCM.cpp \
+     -lssh2 -lssl -lz -lcrypto -o dicomFTP

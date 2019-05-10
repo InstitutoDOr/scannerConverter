@@ -9,46 +9,35 @@
 
 #include "sftp.h"
 #include "dirent.h"
+#include <string>
 
 int main(int argc, char *argv[])
 {
-    /*
-    fileObject f1("dicom.dcm1");
-    if (f1.isDicomFile())
-        fprintf(stderr, "is dicom\n");
-      else
-        fprintf(stderr, "is not dicom\n");
-
-    return 0; 
-
-    char fn1[] = "/test_data/p005/e16216/16216_5_2_dicoms/MR.1.2.840.113619.2.374.15512023.2926070.17242.1507999257.999.dcm";
-    char fn2[] = "/test_data/p005/e16216/16216_5_2_dicoms/MR.1.2.840.113619.2.374.15512023.2926070.17242.1507999258.0.dcm";
-    char fn3[] = "/test_data/p005/e16216/16216_5_2_dicoms/MR.1.2.840.113619.2.374.15512023.2926070.17242.1507999258.10.dcm";
-    fileObject f1(fn1);
-    fileObject f2(fn2);
-    fileObject f3(fn3);
-    fprintf(stderr, "Index values f1 = %d, f2 = %d, f3 = %d\n", f1.fileIndex, f2.fileIndex, f3.fileIndex);
-    return 0;
-    */
- 
     sFTPGE ge;
+
+    // get  the host sFTP address from command line 
     if (argc > 1) {
         ge.hostaddr = inet_addr(argv[1]);
     } else {
-        ge.hostaddr = htonl(0x7F000001);
+        ge.hostaddr = inet_addr("192.168.0.10");
     }
 
+    // get the sFTP username from command line 
     if(argc > 2) {
         ge.username = argv[2];
     }
+
+    // get the sFTP password from command line 
     if(argc > 3) {
         ge.password = argv[3];
     }
+
+    // get the sFTP MR scanner path from command line
     if(argc > 4) {
         ge.sftppath = argv[4];
     }
 
-    /* if we got an 4. argument we set this option if supported */
+    /* if we got an 5o argument we set the authentication method if supported */
     if(argc > 5) {
         if ((ge.auth_pw & 1) && !strcasecmp(argv[5], "-p")) {
             ge.auth_pw = 1;
@@ -61,14 +50,12 @@ int main(int argc, char *argv[])
         }
     }
 
-    int numSeries = 0;    
-    ge.connectSession();
-
-    // create parent output folder
+    // create parent output folder in local machine
     char outputDir[1024];
-    sprintf(outputDir, "outputdir");
+    sprintf(outputDir, "output_scans");
     mkdir(outputDir, 0777);
-    
+
+    // check for other output serie folders in parent output folder 
     DIR *dp;
     struct dirent *dirp;
     if((dp  = opendir(outputDir)) == NULL) {
@@ -76,6 +63,7 @@ int main(int argc, char *argv[])
         return errno;
     }
     
+    int numSeries = 0;    
     while ((dirp = readdir(dp)) != NULL) 
     {
         if ((strcmp(dirp->d_name, ".") != 0) && (strcmp(dirp->d_name, "..") != 0))
@@ -90,34 +78,40 @@ int main(int argc, char *argv[])
               p++;
            }
            number[p] = 0;
-           numSeries = atoi(number);
+           numSeries = max(numSeries, atoi(number));
            //fprintf(stderr, "Series = %d\n", numSeries);
         }
     }
     closedir(dp);
-    fprintf(stderr, "Last series folder count = %d\n", numSeries);
+    //fprintf(stderr, "Last series folder count = %d\n", numSeries);
 
-    while (1)
-    { 
-       if (ge.findInputDir()) // search for new directory in the base folder
-       {
-          ge.cleanUp(); // clean memory variables
-          if (ge.hasNewSeriesDir()) // new directory, let's work
+    // connect to sFTP GE host
+    ge.connectSession();
+    if (ge.isConnected())
+    {
+       while (1)
+       { 
+          if (ge.findInputDir()) // search for the newest series directory inside the newest exame folder in MR scanner output folder
           {
-             char outputdir[256];
-             numSeries++; 
-             sprintf(outputdir, "%s/serie%.2d", outputDir, numSeries); // each dicom series will be written in a different folder
-             mkdir(outputdir, 0777);
-
-             // just converting char to string
-             string outputDir = outputdir; 
-             while (!ge.isTimeToEnd()) // while reading new files, copy and make niftis. Waiting a maximum of 3 secs for new slice files
+             ge.cleanUp(); // clean memory variables
+             if (ge.hasNewSeriesDir()) // new directory, let's work
              {
-                ge.copyStep(outputDir);
+                char outputdir[256];
+                numSeries++; 
+                sprintf(outputdir, "%s/serie%.2d", outputDir, numSeries); // each dicom series will be written in a different folder
+                mkdir(outputdir, 0777);
+
+                // just converting char to string
+                string outputDir = outputdir; 
+                while (!ge.isTimeToEnd()) // while reading new files, copy and make niftis. Waiting a maximum of 3 secs for new slice files
+                {
+                   ge.copyStep(outputDir);
+                }
              }
-          }
-       }  
+          }  
+       }
+       ge.closeSession();
     }
-    ge.closeSession();
+    else fprintf(stderr, "Could not connect to the server.\n");
     return 0;
 }
