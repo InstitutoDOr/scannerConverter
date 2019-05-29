@@ -50,16 +50,14 @@ using namespace std;
 #define SSHbufferSize 8*1024
 #define timeBetweenChecks 1
 #define maximumTries 2
-#define noDCM 0
 #define testMode 1
 
 class fileObject
 {
 public:
-    string filename;
-    string fileTemplate;
-    int thousands, units, fileIndex;
-    double time;
+   string filename;
+   int fileIndex;
+   time_t time;
    
     int isDicomFile()
     {
@@ -69,35 +67,17 @@ public:
         idx = filename.rfind('.');
         if (idx != std::string::npos)
         {
-           if (noDCM) return 1;
-           else
-           {
-              string extension = filename.substr(idx+1);
-              transform(extension.begin(), extension.end(), extension.begin(), ::toupper);
-              return (extension == "DCM");
-           }
+           string extension = filename.substr(idx+1);
+           transform(extension.begin(), extension.end(), extension.begin(), ::toupper);
+           return 1; //(extension == "DCM");
         }
         return 0;
     }
 
-    void returnFileNameParts(char *fileName)
+    fileObject(char *file)
     {
-       char file[1024];
-       strcpy(file, fileName);
-       
+       filename = file;
        int point = 0;
-       if (!noDCM) // removing the dcm extension
-       {
-          for (int c=strlen(file)-1;c >-1; c--)
-          {
-             if (file[c] == '.')
-             {
-                file[c] = 0;
-                break;
-             }   
-          }
-       }
-       // find the point position
        for (int c=strlen(file)-1;c >-1; c--)
        {
           if (file[c] == '.')
@@ -114,21 +94,18 @@ public:
           number[i] = 0; number2[i] = 0;
        } 
 
-       // transforming the last digits in numbers
-       for (int i=0; i<3; i++) number[i] = file[point-3+i];
-       for (int i=point+1; i<strlen(file); i++) number2[i-point-1] = file[i];
-       
-       file[point-3] = 0;
-       fileTemplate = file;
-       thousands = atoi(number);
-       units = atoi(number2);
-    }
-
-    fileObject(char *fileName)
-    {
-       filename = fileName;
-       returnFileNameParts(fileName);
-       fileIndex = thousands * 1000 + units;
+       if (1)
+       {
+          for (int i=point+1; i<strlen(file); i++) number[i-point-1] = file[i];
+          fileIndex = atoi(number);
+       }
+       else if (point > 0)
+       {
+          // transforming the last digits in numbers
+          for (int i=0; i<3; i++) number[i] = file[point-3+i];
+          for (int i=point+1; i<strlen(file)-4; i++) number2[i-point-1] = file[i];
+          fileIndex = atoi(number) * 1000 + atoi(number2);
+       }
     }   
 };
 
@@ -136,55 +113,6 @@ typedef struct
 {
    bool operator()(fileObject const &a, fileObject const &b) const { return a.fileIndex < b.fileIndex; }
 } fileSort;
-
-class sFTPGE;
-class dicomConverter
-{
-   string fileTemplate;
-   int firstSliceIndex;
-   int *sliceReady;
-   int volumeIndex;
-
-   struct nifti_1_header hdr;
-   unsigned char * imgM, *img;
-   size_t imgsz;
-   int nslices;
-   struct TDCMopts opts;
-
-public:   
-   string fileIndex(int index);
-   void prepareVariables();
-   int checkVolumeStatus();
-   int convert2Nii(string outputdir);
-   void reset(); 
-   void resetFlag();
-   void setFirstSliceName(char *filename);
-   struct TDICOMdata lastRead;
-
-   sFTPGE *ge;
-
-   dicomConverter()
-    {
-        nslices=0;
-        imgsz=0;
-        firstSliceIndex=0;
-        imgM = NULL;
-        img=NULL;
-        volumeIndex = 1;
-        sliceReady = NULL;
-        ge = NULL;
-
-        opts.isCreateBIDS = false;
-        opts.isForceStackSameSeries = false;
-        opts.isOnlySingleFile = true;
-        opts.isCreateText = false;
-        opts.isVerbose = 0;
-        opts.isCrop = false;
-        opts.pigzname[0] = 0;
-        opts.filename[0] = 0;
-        opts.isGz = false;
-    }
-};
 
 class sFTPGE
 {
@@ -194,14 +122,14 @@ class sFTPGE
     int sock;
     const char *fingerprint;
     char *userauthlist;
+    string latestExamDir, latestSerieDir, previousSerieDir;
     vector<fileObject> list, lastList;
     int numberOfTries;
     double lastCheck;
     int actualFileIndex;
     int nSlices;
-    int firstVolume;
-    dicomConverter dConv; 
-    int connected;
+    double lastTime;
+    double timeBetweenReads;
 
 public:
     char keyfile1[255];
@@ -209,7 +137,6 @@ public:
     string username;
     string password;
     string sftppath;
-    string latestExamDir, latestSerieDir, previousSerieDir;
 
     unsigned long hostaddr;
     int port;
@@ -228,7 +155,7 @@ public:
     int initsFTPSession();
 
     int connectSession();
-    int getFile(string &filepath, stringstream &filemem, int showErros=1);
+    int getFile(string &filepath, stringstream &filemem);
     int downloadFileList(string &outputdir);
     int getFileList();
     int closeSock();
@@ -243,9 +170,6 @@ public:
     int resetTries();
     int hasNewSeriesDir();
     int cleanUp();
-    int convertVolumes(string &outputdir);
-    int isConnected();
-
     
     sFTPGE()
     {
@@ -254,7 +178,6 @@ public:
         
         username = "sdc";
         password = "adw2.0";
-
         if (testMode) 
            sftppath = "/test_data";
         else
@@ -272,8 +195,8 @@ public:
         lastCheck = 0;
         latestSerieDir   = "";
         previousSerieDir = "";
-        firstVolume = 1;
-        dConv.ge = this;
+        lastTime = 0;
+        timeBetweenReads = 0.5;
     }
 };
 
