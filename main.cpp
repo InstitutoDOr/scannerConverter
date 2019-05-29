@@ -92,7 +92,8 @@ int main(int argc, char *argv[])
              mkdir(outputdir, 0777);
 
              // just converting char to string
-             string outputDir = outputdir; 
+             string outputDir = outputdir;
+             ge.setStartTime();
              while (!ge.isTimeToEnd()) // while reading new files, copy and make niftis. Waiting a maximum of 3 secs for new slice files
              {
                 ge.copyStep(outputDir);

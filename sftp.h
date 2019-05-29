@@ -130,6 +130,7 @@ class sFTPGE
     int nSlices;
     double lastTime;
     double timeBetweenReads;
+    double startTime;
 
 public:
     char keyfile1[255];
@@ -170,7 +171,7 @@ public:
     int resetTries();
     int hasNewSeriesDir();
     int cleanUp();
-    
+    void setStartTime();
     sFTPGE()
     {
         strcpy(keyfile1, "");
@@ -201,6 +202,7 @@ public:
 };
 
 double GetWallTime();
+double GetMTime();
 void reset(stringstream& stream);
 
 

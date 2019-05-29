@@ -25,6 +25,22 @@ double GetWallTime()
 #endif
 }
 
+double GetMTime()
+{
+
+#ifdef WINDOWS
+	return (double)getMilliCount();
+#else
+	struct timeval time;
+	if (gettimeofday(&time, NULL))
+	{
+		//  Handle error
+		return 0;
+	}
+	return (double)time.tv_sec * 1000 + (double)time.tv_usec * .001;
+#endif
+}
+
 void reset(stringstream& stream)
 {
     const static stringstream initial;
@@ -166,7 +182,7 @@ int sFTPGE::getFilelist(string &basedir, vector<fileObject>&list)
     string filename;
     do {
         char mem[512];
-        char longentry[512];
+        char longentry[8192];
         LIBSSH2_SFTP_ATTRIBUTES attrs;
 
         /* loop until we fail */
@@ -443,6 +459,11 @@ int sFTPGE::findInputDir()
    else return 0;
 }
 
+void sFTPGE::setStartTime()
+{
+   startTime = GetMTime();
+}
+
 int sFTPGE::downloadFileList(string &outputdir)
 {
     double ini = GetWallTime();
@@ -491,7 +512,7 @@ int sFTPGE::downloadFileList(string &outputdir)
                 time_t actualTime;
                 time_t creationTime = list[t].time;    
                 time(&actualTime); 
-                fprintf(stderr, "file read = %s \nTimestamp (Creation) = NONE\nTimeStamp (Viewing) = %s\n", fname.c_str(), ctime(&actualTime));
+                fprintf(stderr, "file read = %s \nTimestamp (Creation) = %s\nTimeStamp (Viewing from beging sequence aquisition) = %2.3f ms\n", fname.c_str(), ctime(&creationTime), (GetMTime()-startTime));
                 int i = t % d.locationsInAcquisition;
                 if (d.imageStart == 0)
                 {
