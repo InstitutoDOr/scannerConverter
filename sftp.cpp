@@ -509,10 +509,10 @@ int sFTPGE::downloadFileList(string &outputdir)
             
             if (imgsz > 0)
             {
-                time_t actualTime;
                 time_t creationTime = list[t].time;    
+                time_t actualTime;
                 time(&actualTime); 
-                fprintf(stderr, "file read = %s \nTimestamp (Creation) = %s\nTimeStamp (Viewing from beging sequence aquisition) = %2.3f ms\n", fname.c_str(), ctime(&creationTime), (GetMTime()-startTime));
+                fprintf(stderr, "file read = %s \nTimestamp (Creation) = NONE\nTimeStamp (Viewing from beging sequence aquisition) = %2.3f ms\n", fname.c_str(), (GetMTime()-startTime));
                 int i = t % d.locationsInAcquisition;
                 if (d.imageStart == 0)
                 {
@@ -548,7 +548,11 @@ int sFTPGE::downloadFileList(string &outputdir)
                     nii_saveNII(outputname, hdr, imgM, opts);
                     nslices=0;
                     actualFileIndex=t+1;
+         
+                    time_t actualTime;
+                    time(&actualTime); 
                     fprintf(stderr, "Volume %d written.\n", volumeIndex);
+                    fprintf(stderr, "Timestamp (Creation) = %s\n", ctime(&actualTime));
                 }
             }
         };
