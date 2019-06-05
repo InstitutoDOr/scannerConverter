@@ -50,7 +50,7 @@ using namespace std;
 #define SSHbufferSize 8*1024
 #define timeBetweenChecks 1
 #define maximumTries 2
-#define testMode 1
+#define numDigits 4 // to get before the point in test mode
 
 class fileObject
 {
@@ -58,9 +58,11 @@ public:
    string filename;
    int fileIndex;
    time_t time;
+   int testMode;
    
     int isDicomFile()
     {
+        if (!testMode) return 1;
         if ((filename == ".") || (filename == ".."))
            return 0;
         string::size_type idx;
@@ -74,11 +76,16 @@ public:
         return 0;
     }
 
-    fileObject(char *file)
+    fileObject(char *file, int InTestMode)
     {
+       testMode = InTestMode;
        filename = file;
        int point = 0;
-       for (int c=strlen(file)-1;c >-1; c--)
+       int startingPoint = 1;
+       if (testMode==1)
+          startingPoint = 5; // before .dcm
+
+       for (int c=strlen(file)-startingPoint;c >-1; c--)
        {
           if (file[c] == '.')
           {
@@ -94,7 +101,7 @@ public:
           number[i] = 0; number2[i] = 0;
        } 
 
-       if (1)
+       if (!testMode)
        {
           for (int i=point+1; i<strlen(file); i++) number[i-point-1] = file[i];
           fileIndex = atoi(number);
@@ -102,7 +109,7 @@ public:
        else if (point > 0)
        {
           // transforming the last digits in numbers
-          for (int i=0; i<3; i++) number[i] = file[point-3+i];
+          for (int i=0; i<numDigits; i++) number[i] = file[point-numDigits+i];
           for (int i=point+1; i<strlen(file)-4; i++) number2[i-point-1] = file[i];
           fileIndex = atoi(number) * 1000 + atoi(number2);
        }
@@ -114,6 +121,27 @@ typedef struct
    bool operator()(fileObject const &a, fileObject const &b) const { return a.fileIndex < b.fileIndex; }
 } fileSort;
 
+
+class LogObject
+{
+	stringstream buffer;
+	fstream outputStream;
+	string fileName;
+public:
+	// create log file
+	void initializeLogFile(char *filename);
+
+	// closes the log file
+	void closeLogFile();
+
+	// writes the message in the log file
+	void writeLog(int inScreen, const char * format, ...);
+        void flushLog();
+        void resetLog();
+	LogObject() { fileName = ""; };
+	~LogObject() { closeLogFile(); };
+};
+
 class sFTPGE
 {
     LIBSSH2_SFTP *sftp_session;
@@ -123,14 +151,16 @@ class sFTPGE
     const char *fingerprint;
     char *userauthlist;
     string latestExamDir, latestSerieDir, previousSerieDir;
-    vector<fileObject> list, lastList;
+    vector<fileObject> list;
     int numberOfTries;
     double lastCheck;
     int actualFileIndex;
     int nSlices;
+    int lastListSize;
     double lastTime;
     double timeBetweenReads;
     double startTime;
+    int lastIndexChecked;
 
 public:
     char keyfile1[255];
@@ -138,10 +168,12 @@ public:
     string username;
     string password;
     string sftppath;
+    int testMode;
 
     unsigned long hostaddr;
     int port;
     int auth_pw;
+    LogObject logMain, logSeries;
 
     string latestSession(string &basedir);
     string latestDir(string &basedir);
@@ -172,17 +204,25 @@ public:
     int hasNewSeriesDir();
     int cleanUp();
     void setStartTime();
-    sFTPGE()
+
+    sFTPGE(int InTestMode)
     {
+        testMode = InTestMode;
         strcpy(keyfile1, "");
         strcpy(keyfile2, "");
         
         username = "sdc";
         password = "adw2.0";
         if (testMode) 
+        {
            sftppath = "/test_data";
+           hostaddr = htonl(0x7F000001);
+        }
         else
+        {
            sftppath = "/export/home1/sdc_image_pool/images";
+           hostaddr = inet_addr("192.168.0.10");
+        } 
         
         auth_pw = 0;
 
@@ -197,12 +237,15 @@ public:
         latestSerieDir   = "";
         previousSerieDir = "";
         lastTime = 0;
-        timeBetweenReads = 0.5;
+        timeBetweenReads = 0.25;  // 50 ms
+        lastIndexChecked = -1;
+        lastListSize = 0;
     }
 };
 
 double GetWallTime();
 double GetMTime();
 void reset(stringstream& stream);
+void timeStamp(string &timestamp);
 
 

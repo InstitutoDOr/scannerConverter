@@ -8,6 +8,17 @@
  */
 
 #include "sftp.h"
+#include "stdarg.h"
+
+void timeStamp(string &timestamp)
+{
+   char auxString[100];
+   time_t time_now;
+   time(&time_now);
+   struct tm *timeinfo = localtime(&time_now);
+   strftime(auxString, 100, "%Y%m%d%H%M%S", timeinfo);
+   timestamp = auxString;
+}
 
 double GetWallTime()
 {
@@ -98,6 +109,60 @@ static void kbd_callback(const char *name, int name_len,
         "Done. Sending keyboard-interactive responses to server now.\n");
 }
 
+void LogObject::resetLog()
+{
+    closeLogFile();
+    reset(buffer);
+    fileName = "";
+}
+
+void LogObject::initializeLogFile(char *filename)
+{
+	fileName = filename;
+	outputStream.open(filename, fstream::out | fstream::trunc);
+	outputStream << buffer.str().c_str();
+}
+
+// closes the log file
+void LogObject::closeLogFile()
+{
+	if (fileName != "")
+		outputStream.close();
+}
+
+void LogObject::flushLog()
+{
+	if (fileName != "")
+		outputStream.flush();
+}
+
+void LogObject::writeLog(int inScreen, const char * format, ...)
+{
+	char auxBuffer[3000];
+	char timestamp[100];
+
+
+	time_t time_now;
+	time(&time_now);
+	struct tm *timeinfo = localtime(&time_now);
+	strftime(timestamp, 100, "%Y-%m-%d %H:%M:%S : ", timeinfo);
+	va_list args, screen_args;
+
+	va_start(args, format);
+	vsprintf(auxBuffer, format, args);
+	va_end(args);
+
+	if (fileName != "")
+		outputStream << timestamp << auxBuffer;
+	else
+		buffer << timestamp << auxBuffer;
+
+	va_start(screen_args, format);
+	if (inScreen)
+		vfprintf(stderr, format, screen_args);
+	va_end(screen_args);
+}
+
 string sFTPGE::latestDir(string &basedir)
 {
     unsigned long recentTime=0;
@@ -107,7 +172,7 @@ string sFTPGE::latestDir(string &basedir)
     LIBSSH2_SFTP_HANDLE *sftp_handle = libssh2_sftp_opendir(sftp_session, basedir.c_str());
 
     if (!sftp_handle) {
-        fprintf(stderr, "Unable to open dir with SFTP\n");
+        logMain.writeLog(1, "Unable to open dir with SFTP\n");
         return latestExamDir;
     }
 
@@ -175,14 +240,14 @@ int sFTPGE::getFilelist(string &basedir, vector<fileObject>&list)
     LIBSSH2_SFTP_HANDLE *sftp_handle = libssh2_sftp_opendir(sftp_session, basedir.c_str());
 
     if (!sftp_handle) {
-        fprintf(stderr, "Unable to open dir with SFTP\n");
+        logMain.writeLog(1, "Unable to open dir with SFTP\n");
         return 1;
     }
 
     string filename;
     do {
         char mem[512];
-        char longentry[8192];
+        char longentry[512];
         LIBSSH2_SFTP_ATTRIBUTES attrs;
 
         /* loop until we fail */
@@ -190,8 +255,9 @@ int sFTPGE::getFilelist(string &basedir, vector<fileObject>&list)
                                      longentry, sizeof(longentry), &attrs);
         if (rc > 0)
         {
-           fileObject fileObj(mem);
+           fileObject fileObj(mem, testMode);
            fileObj.time = (time_t) attrs.mtime;
+           
            if (fileObj.isDicomFile())
               list.push_back(fileObj);
         }
@@ -214,11 +280,11 @@ int sFTPGE::getFile(string &filepath, stringstream &filemem)
     if (!sftp_handle) {
         int errmsg_len;
         char *errmsg;
-        fprintf(stderr, "Unable to open file with SFTP: %ld\n",
+        logMain.writeLog(1, "Unable to open file with SFTP: %ld\n",
                 libssh2_sftp_last_error(sftp_session));
                 
         libssh2_session_last_error(session, &errmsg, &errmsg_len, 0); 
-        fprintf(stderr, "Error : %s\n", errmsg);
+        logMain.writeLog(1, "Error : %s\n", errmsg);
         return 1;
     }
     
@@ -255,7 +321,7 @@ int sFTPGE::initWinsock()
 
     err = WSAStartup(MAKEWORD(2,0), &wsadata);
     if (err != 0) {
-        fprintf(stderr, "WSAStartup failed with error: %d\n", err);
+        logMain.writeLog(1, "WSAStartup failed with error: %d\n", err);
         return 1;
     }
 #endif
@@ -266,10 +332,10 @@ int sFTPGE::initSSH()
 {
     int rc = libssh2_init (0);
     if (rc != 0) {
-        fprintf(stderr, "libssh2 initialization failed (%d)\n", rc);
+        logMain.writeLog(1, "libssh2 initialization failed (%d)\n", rc);
         return 1;
     }
-    else fprintf(stderr, "initialized!\n");
+    else logMain.writeLog(1, "initialized!\n");
     
     return 0;
 }
@@ -287,10 +353,10 @@ int sFTPGE::initSock()
     sin.sin_addr.s_addr = hostaddr;
     if (connect(sock, (struct sockaddr*)(&sin),
                 sizeof(struct sockaddr_in)) != 0) {
-        fprintf(stderr, "failed to connect!\n");
+        logMain.writeLog(1, "failed to connect!\n");
         return -1;
     }
-    else fprintf(stderr, "connected!\n");
+    else logMain.writeLog(1, "connected!\n");
     
     return 0;
 }
@@ -322,7 +388,7 @@ int sFTPGE::initSSHSession()
      */
     int rc = libssh2_session_handshake(session, sock);
     if(rc) {
-        fprintf(stderr, "Failure establishing SSH session: %d\n", rc);
+        logMain.writeLog(1, "Failure establishing SSH session: %d\n", rc);
         return -1;
     }
     
@@ -333,16 +399,16 @@ int sFTPGE::initSSHSession()
      */
     fingerprint = libssh2_hostkey_hash(session, LIBSSH2_HOSTKEY_HASH_SHA1);
     
-    fprintf(stderr, "Fingerprint: ");
+    logMain.writeLog(1, "Fingerprint: ");
     for(int i = 0; i < 20; i++) {
-        fprintf(stderr, "%02X ", (unsigned char)fingerprint[i]);
+        logMain.writeLog(1, "%02X ", (unsigned char)fingerprint[i]);
     }
-    fprintf(stderr, "\n");
+    logMain.writeLog(1, "\n");
     
     
     /* check what authentication methods are available */
     userauthlist = libssh2_userauth_list(session, username.c_str(), username.size());
-    fprintf(stderr, "Authentication methods: %s\n", userauthlist);
+    logMain.writeLog(1, "Authentication methods: %s\n", userauthlist);
     if (strstr(userauthlist, "password") != NULL) {
         auth_pw |= 1;
     }
@@ -356,29 +422,29 @@ int sFTPGE::initSSHSession()
     if (auth_pw & 1) {
         /* We could authenticate via password */
         if (libssh2_userauth_password(session, username.c_str(), password.c_str())) {
-            fprintf(stderr, "Authentication by password failed.\n");
+            logMain.writeLog(1, "Authentication by password failed.\n");
             return -1;
         }
     } else if (auth_pw & 2) {
         /* Or via keyboard-interactive */
         if (libssh2_userauth_keyboard_interactive(session, username.c_str(), &kbd_callback) ) {
-            fprintf(stderr,
+            logMain.writeLog(1, 
                     "\tAuthentication by keyboard-interactive failed!\n");
             return -1;
         } else {
-            fprintf(stderr,
+            logMain.writeLog(1, 
                     "\tAuthentication by keyboard-interactive succeeded.\n");
         }
     } else if (auth_pw & 4) {
         /* Or by public key */
         if (libssh2_userauth_publickey_fromfile(session, username.c_str(), keyfile1, keyfile2, password.c_str())) {
-            fprintf(stderr, "\tAuthentication by public key failed!\n");
+            logMain.writeLog(1, "\tAuthentication by public key failed!\n");
             return -1;
         } else {
-            fprintf(stderr, "\tAuthentication by public key succeeded.\n");
+            logMain.writeLog(1, "\tAuthentication by public key succeeded.\n");
         }
     } else {
-        fprintf(stderr, "No supported authentication methods found!\n");
+        logMain.writeLog(1, "No supported authentication methods found!\n");
         return -1;
     }
     
@@ -388,11 +454,11 @@ int sFTPGE::initSSHSession()
 
 int sFTPGE::initsFTPSession()
 {
-    //fprintf(stderr, "libssh2_sftp_init()!\n");
+    logMain.writeLog(0, "libssh2_sftp_init()!\n");
     sftp_session = libssh2_sftp_init(session);
     
     if (!sftp_session) {
-        fprintf(stderr, "Unable to init SFTP session\n");
+        logMain.writeLog(1, "Unable to init SFTP session\n");
         return -1;
     }
     
@@ -403,8 +469,8 @@ int sFTPGE::initsFTPSession()
 
 int sFTPGE::hasNewFiles()
 {
-//   fprintf(stderr, "Lista atual = %ld, Anterior = %ld\n", list.size(), lastList.size());
-   return (list.size()-lastList.size());
+//   fprintf(stderr, "Lista atual = %ld, Anterior = %ld\n", list.size(), lastListSize);
+   return (list.size()-lastListSize);
 }
 
 int sFTPGE::getLatestExamDir()
@@ -415,7 +481,7 @@ int sFTPGE::getLatestExamDir()
         if  (examDir != latestExamDir)
         {
            latestExamDir = examDir;
-           fprintf(stderr, "Most recent path : %s\n", latestExamDir.c_str());
+           logMain.writeLog(1, "Most recent path : %s\n", latestExamDir.c_str());
         } 
         return 1;
     }
@@ -435,7 +501,7 @@ int sFTPGE::getLatestSeriesDir()
     {
         previousSerieDir = latestSerieDir;
         latestSerieDir = seriesDir; 
-        fprintf(stderr, "Most recent series path : %s\n", latestSerieDir.c_str());
+        logMain.writeLog(1, "Most recent series path : %s\n", latestSerieDir.c_str());
         return 1;
     }
     else return 0;
@@ -444,11 +510,11 @@ int sFTPGE::getLatestSeriesDir()
 int sFTPGE::getFileList()
 {
     double ini = GetWallTime();
-    lastList = list;
+    lastListSize = list.size();
     list.clear();
     getFilelist(latestSerieDir, list);
     double end = GetWallTime();
-    //fprintf(stderr, "Time to get list %f sec\n", end-ini);
+    logSeries.writeLog(1, "Time to get list %f sec\n", end-ini);
     return 0;
 }
 
@@ -498,7 +564,7 @@ int sFTPGE::downloadFileList(string &outputdir)
                 if (headerDcm2Nii(d, &hdr, true) != EXIT_FAILURE)
                 {
                     imgsz = nii_ImgBytes(hdr);
-                    fprintf(stderr, "slice size=%ld numslices = %d\n", imgsz, d.locationsInAcquisition);
+                    logSeries.writeLog(1, "slice size=%ld numslices = %d\n", imgsz, d.locationsInAcquisition);
                     hdr.dim[3] = d.locationsInAcquisition;
                     for (int i = 4; i < 8; i++) hdr.dim[i] = 0;
                     imgM = (unsigned char *)malloc(imgsz* (uint64_t)d.locationsInAcquisition);
@@ -512,7 +578,10 @@ int sFTPGE::downloadFileList(string &outputdir)
                 time_t creationTime = list[t].time;    
                 time_t actualTime;
                 time(&actualTime); 
-                fprintf(stderr, "file read = %s \nTimestamp (Creation) = NONE\nTimeStamp (Viewing from beging sequence aquisition) = %2.3f ms\n", fname.c_str(), (GetMTime()-startTime));
+                if (t > lastIndexChecked) 
+                {
+                   logSeries.writeLog(1, "file read = %s \nTimestamp (Creation) = %sTimeStamp (Viewing from beging sequence aquisition) = %2.3f ms\n", fname.c_str(), ctime(&creationTime), (GetMTime()-startTime));
+                }
                 int i = t % d.locationsInAcquisition;
                 if (d.imageStart == 0)
                 {
@@ -527,21 +596,17 @@ int sFTPGE::downloadFileList(string &outputdir)
                 if (filemem)
                 {
                     memcpy(&imgM[(uint64_t)i*imgsz], &img[0], imgsz);
-                    fprintf(stderr, "Writing slice %d of volume %d\n", (i+1), ((int)(t / d.locationsInAcquisition) + 1));
+                    if (t > lastIndexChecked)
+                    { 
+                       logSeries.writeLog(1, "Writing (in memory) slice %d of volume %d TimeStamp = %2.3f ms\n\n", (i+1), ((int)(t / d.locationsInAcquisition) + 1), (GetMTime()-startTime));
+                       lastIndexChecked = t;
+                    }
                     nslices++;
                 }
                 
-//                if (nslices == 1)
-//                {
-//                    firstHeader = d;
-//                }
                 if (nslices == d.locationsInAcquisition)
                 {
                     char outputname[1024];
-//                    sliceDir = headerDcm2Nii2(firstHeader, d, &hdr, true);
-//                    fprintf(stderr, "direction %d\n", sliceDir);
-//                    if (sliceDir < 0)
-//                        imgM = nii_flipZ(imgM, &hdr);
                     
                     int volumeIndex = ((int)(t / d.locationsInAcquisition) + 1);
                     sprintf(outputname, "%s/vol_%.5d", outputdir.c_str(), volumeIndex);
@@ -551,8 +616,9 @@ int sFTPGE::downloadFileList(string &outputdir)
          
                     time_t actualTime;
                     time(&actualTime); 
-                    fprintf(stderr, "Volume %d written.\n", volumeIndex);
-                    fprintf(stderr, "Timestamp (Creation) = %s\n", ctime(&actualTime));
+                    logSeries.writeLog(1, "Volume %d written.\n", volumeIndex);
+                    logSeries.writeLog(1, "Timestamp (Volume creation) = %s", ctime(&actualTime));
+                    logSeries.writeLog(1, "Timestamp (millisecs from sequence start) = %2.3f\n\n", (GetMTime()-startTime));
                 }
             }
         };
@@ -562,7 +628,7 @@ int sFTPGE::downloadFileList(string &outputdir)
 
     if (imgM)
        free(imgM);
-    fprintf(stderr, "Time to get files %f sec\n", GetWallTime()-ini);
+    logSeries.writeLog(1, "Time to get files %f sec\n\n\n", GetWallTime()-ini);
     return 0;
 }
 
@@ -571,7 +637,7 @@ int sFTPGE::resetTries()
    numberOfTries = 0;
    lastCheck = 0;
    list.clear();
-   lastList.clear();
+   lastListSize = 0;
    return 0;
 }
 
@@ -580,6 +646,7 @@ int sFTPGE::cleanUp()
    resetTries();
    nSlices = 0;
    actualFileIndex = 0;
+   lastIndexChecked = -1;
    resetTries(); 
    return 0;
 }
@@ -610,7 +677,7 @@ int sFTPGE::copyStep(string &outputdir)
    if ((GetWallTime()-lastTime) > timeBetweenReads)
    {
       getFileList();
-      if ((hasNewFiles()) && (actualFileIndex+nSlices <= list.size()))
+      if ((hasNewFiles()) && (actualFileIndex+nSlices < list.size()))
          downloadFileList(outputdir);
       lastTime = GetWallTime();
    }
@@ -641,7 +708,7 @@ int sFTPGE::closeSock()
 #else
     close(sock);
 #endif
-    fprintf(stderr, "all done\n");
+    logMain.writeLog(1, "all done\n");
     
     libssh2_exit();
     return 0;

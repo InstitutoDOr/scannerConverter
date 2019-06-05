@@ -12,33 +12,34 @@
 
 int main(int argc, char *argv[])
 {
-    sFTPGE ge;
+    int testMode = 0;
     if (argc > 1) {
-        ge.hostaddr = inet_addr(argv[1]);
-    } else {
-        ge.hostaddr = inet_addr("192.168.0.10");
-//        ge.hostaddr = htonl(0x7F000001);
-    }
-
+        testMode = atoi(argv[1]);
+    } 
+    sFTPGE ge(testMode);
+    
     if(argc > 2) {
-        ge.username = argv[2];
+       ge.hostaddr = inet_addr(argv[2]);
     }
     if(argc > 3) {
-        ge.password = argv[3];
+        ge.username = argv[3];
     }
     if(argc > 4) {
-        ge.sftppath = argv[4];
+        ge.password = argv[4];
+    }
+    if(argc > 5) {
+        ge.sftppath = argv[5];
     }
 
     /* if we got an 4. argument we set this option if supported */
-    if(argc > 5) {
-        if ((ge.auth_pw & 1) && !strcasecmp(argv[5], "-p")) {
+    if(argc > 6) {
+        if ((ge.auth_pw & 1) && !strcasecmp(argv[6], "-p")) {
             ge.auth_pw = 1;
         }
-        if ((ge.auth_pw & 2) && !strcasecmp(argv[5], "-i")) {
+        if ((ge.auth_pw & 2) && !strcasecmp(argv[6], "-i")) {
             ge.auth_pw = 2;
         }
-        if ((ge.auth_pw & 4) && !strcasecmp(argv[5], "-k")) {
+        if ((ge.auth_pw & 4) && !strcasecmp(argv[6], "-k")) {
             ge.auth_pw = 4;
         }
     }
@@ -77,18 +78,25 @@ int main(int argc, char *argv[])
         }
     }
     closedir(dp);
-    fprintf(stderr, "Last series folder count = %d\n", numSeries);
 
+    string timeStampString;
+    timeStamp(timeStampString); 
+    timeStampString = timeStampString + ".txt";
+    ge.logMain.initializeLogFile((char *)timeStampString.c_str());
+    ge.logMain.writeLog(1, "Last series folder count = %d\n", numSeries);
     while (1)
     { 
        if (ge.findInputDir()) // search for new directory in the base folder
        {
           ge.cleanUp(); // clean memory variables
           if (ge.hasNewSeriesDir()) // new directory, let's work
-          {
-             char outputdir[256];
+          {  
+             char outputdir[256], logName[256];
              numSeries++; 
              sprintf(outputdir, "%s/serie%.2d", outputDir, numSeries); // each dicom series will be written in a different folder
+             sprintf(logName, "%s/serie%.2d.txt", outputDir, numSeries); // name of the log file for the serie
+             ge.logSeries.resetLog();  
+             ge.logMain.flushLog();
              mkdir(outputdir, 0777);
 
              // just converting char to string
@@ -98,6 +106,7 @@ int main(int argc, char *argv[])
              {
                 ge.copyStep(outputDir);
              }
+             ge.logSeries.initializeLogFile(logName);    
           }
        }  
     }
