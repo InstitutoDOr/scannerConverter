@@ -48,6 +48,11 @@ int main(int argc, char *argv[])
     ge.connectSession();
 
     // create parent output folder
+    char logDir[1024];
+    sprintf(logDir, "logs");
+    mkdir(logDir, 0777);
+
+    // create parent output folder
     char outputDir[1024];
     sprintf(outputDir, "output_scans");
     mkdir(outputDir, 0777);
@@ -63,25 +68,31 @@ int main(int argc, char *argv[])
     {
         if ((strcmp(dirp->d_name, ".") != 0) && (strcmp(dirp->d_name, "..") != 0))
         {
-           char number[20];
-           int p=0, q;
-           while ((p < strlen(dirp->d_name)) && (!isdigit(dirp->d_name[p]))) p++;
-           q = p;
-           while ((p < strlen(dirp->d_name)) && (isdigit(dirp->d_name[p]))) 
-           {
-              number[p-q] = dirp->d_name[p];
-              p++;
+           if (dirp->d_type == DT_DIR)
+           { 
+              char number[20];
+              int p=0, q;
+              fprintf(stderr, "Directory seeing %s\n", dirp->d_name);
+              while ((p < strlen(dirp->d_name)) && (!isdigit(dirp->d_name[p]))) p++;
+              q = p;
+              while ((p < strlen(dirp->d_name)) && (isdigit(dirp->d_name[p]))) 
+              {
+                 number[p-q] = dirp->d_name[p];
+                 p++;
+              }
+              number[p] = 0;
+              int tempNum = atoi(number);
+              if (numSeries < tempNum)
+                 numSeries = tempNum;
+              //fprintf(stderr, "Series = %d\n", numSeries);
            }
-           number[p] = 0;
-           numSeries = atoi(number);
-           //fprintf(stderr, "Series = %d\n", numSeries);
         }
     }
     closedir(dp);
 
     string timeStampString;
     timeStamp(timeStampString); 
-    timeStampString = timeStampString + ".txt";
+    timeStampString = string(logDir) + "/" + timeStampString + ".txt";
     ge.logMain.initializeLogFile((char *)timeStampString.c_str());
     ge.logMain.writeLog(1, "Last series folder count = %d\n", numSeries);
     while (1)

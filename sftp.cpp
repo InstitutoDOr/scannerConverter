@@ -678,8 +678,10 @@ int sFTPGE::copyStep(string &outputdir)
    {
       getFileList();
       if ((hasNewFiles()) && (actualFileIndex+nSlices < list.size()))
+      {
          downloadFileList(outputdir);
-      lastTime = GetWallTime();
+         lastTime = GetWallTime();
+      }
    }
    return isTimeToEnd();
 }
