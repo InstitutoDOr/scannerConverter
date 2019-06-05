@@ -237,7 +237,7 @@ public:
         latestSerieDir   = "";
         previousSerieDir = "";
         lastTime = 0;
-        timeBetweenReads = 0.25;  // 50 ms
+        timeBetweenReads = 0.1;  // 50 ms
         lastIndexChecked = -1;
         lastListSize = 0;
     }

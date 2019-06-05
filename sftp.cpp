@@ -613,6 +613,8 @@ int sFTPGE::downloadFileList(string &outputdir)
                     nii_saveNII(outputname, hdr, imgM, opts);
                     nslices=0;
                     actualFileIndex=t+1;
+                    if (actualFileIndex+nSlices > list.size())
+                       break;
          
                     time_t actualTime;
                     time(&actualTime); 
@@ -677,10 +679,10 @@ int sFTPGE::copyStep(string &outputdir)
    if ((GetWallTime()-lastTime) > timeBetweenReads)
    {
       getFileList();
+      lastTime = GetWallTime();
       if ((hasNewFiles()) && (actualFileIndex+nSlices < list.size()))
       {
          downloadFileList(outputdir);
-         lastTime = GetWallTime();
       }
    }
    return isTimeToEnd();
