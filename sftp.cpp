@@ -595,7 +595,7 @@ int sFTPGE::downloadFileList(string &outputdir)
                 filemem.read((char *)img, imgsz);
                 if (filemem)
                 {
-                    memcpy(&imgM[(uint64_t)i*imgsz], &img[0], imgsz);
+                    memcpy(&imgM[(uint64_t)(d.locationsInAcquisition-1-i)*imgsz], &img[0], imgsz);
                     if (t > lastIndexChecked)
                     { 
                        logSeries.writeLog(1, "Writing (in memory) slice %d of volume %d TimeStamp = %2.3f ms\n\n", (i+1), ((int)(t / d.locationsInAcquisition) + 1), (GetMTime()-startTime));
@@ -621,6 +621,7 @@ int sFTPGE::downloadFileList(string &outputdir)
                     logSeries.writeLog(1, "Volume %d written.\n", volumeIndex);
                     logSeries.writeLog(1, "Timestamp (Volume creation) = %s", ctime(&actualTime));
                     logSeries.writeLog(1, "Timestamp (millisecs from sequence start) = %2.3f\n\n", (GetMTime()-startTime));
+                    logSeries.flushLog();
                 }
             }
         };

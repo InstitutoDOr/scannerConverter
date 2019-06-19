@@ -110,6 +110,7 @@ int main(int argc, char *argv[])
              ge.logMain.flushLog();
              mkdir(outputdir, 0777);
 
+             ge.logSeries.initializeLogFile(logName);    
              // just converting char to string
              string outputDir = outputdir;
              ge.setStartTime();
@@ -117,7 +118,6 @@ int main(int argc, char *argv[])
              {
                 ge.copyStep(outputDir);
              }
-             ge.logSeries.initializeLogFile(logName);    
           }
        }  
     }
