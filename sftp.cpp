@@ -573,7 +573,7 @@ int sFTPGE::downloadFileList(string &outputdir)
                 }
             }
             
-            if (imgsz > 0)
+            if ((imgsz > 0) && (nSlices > 0))
             {
                 time_t creationTime = list[t].time;    
                 time_t actualTime;
