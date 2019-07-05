@@ -62,9 +62,9 @@ public:
    
     int isDicomFile()
     {
-        if (!testMode) return 1;
         if ((filename == ".") || (filename == ".."))
            return 0;
+        if (!testMode) return 1;
         string::size_type idx;
         idx = filename.rfind('.');
         if (idx != std::string::npos)
@@ -204,6 +204,7 @@ public:
     int hasNewSeriesDir();
     int cleanUp();
     void setStartTime();
+    int saveNifti(char * niiFilename, struct nifti_1_header hdr, unsigned char* im, struct TDCMopts opts);
 
     sFTPGE(int InTestMode)
     {

@@ -530,6 +530,32 @@ void sFTPGE::setStartTime()
    startTime = GetMTime();
 }
 
+int sFTPGE::saveNifti(char * niiFilename, struct nifti_1_header hdr, unsigned char* im, struct TDCMopts opts) 
+{
+    hdr.vox_offset = 352;
+    size_t imgsz = nii_ImgBytes(hdr);
+    if (imgsz < 1) {
+    	logSeries.writeLog(1, "Error: Image size is zero bytes %s\n", niiFilename);
+    	return 1;
+    }
+
+    char fname[2048] = {""};
+    strcpy (fname,niiFilename);
+    strcat (fname,".nii");
+    FILE *fp = fopen(fname, "wb");
+    if (!fp) 
+    {
+       logSeries.writeLog(1, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!    Error opening the file %s for writing !!!\n", fname);
+       return 2;
+    } 
+    fwrite(&hdr, sizeof(hdr), 1, fp);
+    uint32_t pad = 0;
+    fwrite(&pad, sizeof( pad), 1, fp);
+    fwrite(&im[0], imgsz, 1, fp);
+    fclose(fp);
+    return 0;
+}
+
 int sFTPGE::downloadFileList(string &outputdir)
 {
     double ini = GetWallTime();
@@ -564,7 +590,10 @@ int sFTPGE::downloadFileList(string &outputdir)
                 if (headerDcm2Nii(d, &hdr, true) != EXIT_FAILURE)
                 {
                     imgsz = nii_ImgBytes(hdr);
-                    logSeries.writeLog(1, "slice size=%ld numslices = %d\n", imgsz, d.locationsInAcquisition);
+
+                    int fileLen=filemem.tellg();
+                    logSeries.writeLog(1, "filename = %s, file size = %d, slice size=%ld numslices = %d\n", fname.c_str(), fileLen, imgsz, d.locationsInAcquisition); 
+
                     hdr.dim[3] = d.locationsInAcquisition;
                     for (int i = 4; i < 8; i++) hdr.dim[i] = 0;
                     imgM = (unsigned char *)malloc(imgsz* (uint64_t)d.locationsInAcquisition);
@@ -610,7 +639,7 @@ int sFTPGE::downloadFileList(string &outputdir)
                     
                     int volumeIndex = ((int)(t / d.locationsInAcquisition) + 1);
                     sprintf(outputname, "%s/vol_%.5d", outputdir.c_str(), volumeIndex);
-                    nii_saveNII(outputname, hdr, imgM, opts);
+                    saveNifti(outputname, hdr, imgM, opts);
                     nslices=0;
                     actualFileIndex=t+1;
                     if (actualFileIndex+nSlices > list.size())
@@ -618,7 +647,7 @@ int sFTPGE::downloadFileList(string &outputdir)
          
                     time_t actualTime;
                     time(&actualTime); 
-                    logSeries.writeLog(1, "Volume %d written.\n", volumeIndex);
+                    logSeries.writeLog(1, "Volume %d written. File name = %s\n", volumeIndex, outputname);
                     logSeries.writeLog(1, "Timestamp (Volume creation) = %s", ctime(&actualTime));
                     logSeries.writeLog(1, "Timestamp (millisecs from sequence start) = %2.3f\n\n", (GetMTime()-startTime));
                     logSeries.flushLog();
