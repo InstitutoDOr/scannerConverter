@@ -12,36 +12,38 @@
 
 int main(int argc, char *argv[])
 {
-    int testMode = 0;
+    char *inputpath = NULL;
     if (argc > 1) {
-        testMode = atoi(argv[1]);
+        inputpath = argv[1];
     } 
-    sFTPGE ge(testMode);
+    sFTPGE ge(inputpath);
     
-    if(argc > 2) {
-       ge.hostaddr = inet_addr(argv[2]);
-    }
-    if(argc > 3) {
-        ge.username = argv[3];
-    }
-    if(argc > 4) {
-        ge.password = argv[4];
-    }
-    if(argc > 5) {
-        ge.sftppath = argv[5];
-    }
-
-    /* if we got an 4. argument we set this option if supported */
-    if(argc > 6) {
-        if ((ge.auth_pw & 1) && !strcasecmp(argv[6], "-p")) {
-            ge.auth_pw = 1;
-        }
-        if ((ge.auth_pw & 2) && !strcasecmp(argv[6], "-i")) {
-            ge.auth_pw = 2;
-        }
-        if ((ge.auth_pw & 4) && !strcasecmp(argv[6], "-k")) {
-            ge.auth_pw = 4;
-        }
+    if (0)
+    {
+       if (argc > 2) {
+          ge.hostaddr = inet_addr(argv[2]);
+       }
+       if (argc > 3) {
+          ge.username = argv[3];
+       }
+       if(argc > 4) {
+          ge.password = argv[4];
+       }
+       if(argc > 5) {
+          ge.sftppath = argv[5];
+       }
+       /* if we got an 4. argument we set this option if supported */
+       if(argc > 6) {
+           if ((ge.auth_pw & 1) && !strcasecmp(argv[6], "-p")) {
+              ge.auth_pw = 1;
+           }
+           if ((ge.auth_pw & 2) && !strcasecmp(argv[6], "-i")) {
+              ge.auth_pw = 2;
+           }
+           if ((ge.auth_pw & 4) && !strcasecmp(argv[6], "-k")) {
+              ge.auth_pw = 4;
+           }
+       }
     }
 
     int numSeries = 0;    

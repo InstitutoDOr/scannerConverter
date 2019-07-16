@@ -9,6 +9,10 @@
 
 #include "sftp.h"
 #include "stdarg.h"
+#include <fstream>
+#include <sstream>
+#include <sys/stat.h>
+#include "dirent.h"
 
 void timeStamp(string &timestamp)
 {
@@ -163,7 +167,7 @@ void LogObject::writeLog(int inScreen, const char * format, ...)
 	va_end(screen_args);
 }
 
-string sFTPGE::latestDir(string &basedir)
+string sFTPGE::latestDirSFTP(string &basedir)
 {
     unsigned long recentTime=0;
     int rc;
@@ -208,20 +212,67 @@ string sFTPGE::latestDir(string &basedir)
     return latestExamDir;
 }
 
+string sFTPGE::_latestDir(string &basedir)
+{
+    DIR *dp;
+    unsigned long recentTime=0;
+    struct dirent *dirp;
+    struct stat attrs;
+    string latestExamDir="";
+
+    if((dp  = opendir(basedir.c_str())) == NULL) {
+        cout << "Error(" << errno << ") opening " << basedir << endl;
+        return latestExamDir;
+    }
+    
+    string latestDir = "";
+    while ((dirp = readdir(dp)) != NULL) 
+    {
+        if ((strcmp(dirp->d_name, ".") != 0) && (strcmp(dirp->d_name, "..") != 0))
+        {
+           if (dirp->d_type == DT_DIR)
+           {
+              char tempDir[512];
+              sprintf(tempDir, "%s/%s", basedir.c_str(), dirp->d_name);
+              stat(tempDir, &attrs);  
+              if ((attrs.st_mtime > recentTime) && (strcmp(dirp->d_name, ".DS_Store")))
+              {
+                 recentTime = attrs.st_mtime;
+                 latestDir = dirp->d_name; 
+              }
+           }
+        }
+    }
+    closedir(dp);
+
+    if (latestDir.size() > 0) 
+    {
+       latestExamDir = basedir;
+       latestExamDir += "/";
+       latestExamDir += latestDir; 
+    }
+    return latestExamDir;
+}
+
+string sFTPGE::latestDir(string &basedir)
+{
+    if (mode == 1)
+       return _latestDir(basedir);
+    else if (mode == 2)
+       return latestDirSFTP(basedir);
+}
+
 string sFTPGE::latestSession(string &basedir)
 {
     string lastPatientDir;
     string latestExamDir;
     
     // latest patient
-    //fprintf(stderr, "basedir = %s\n", basedir.c_str());
     lastPatientDir = latestDir(basedir);
 
     // latest Session
     latestExamDir = latestDir(lastPatientDir);
 
-    //fprintf(stderr, "PatientDir = %s\n", lastPatientDir.c_str());
-    //fprintf(stderr, "ExamDir = %s\n", latestExamDir.c_str());
     return latestExamDir;
 }
 
@@ -231,7 +282,7 @@ string sFTPGE::latestSerie(string &sessionDir)
     return latestSerie;
 }
 
-int sFTPGE::getFilelist(string &basedir, vector<fileObject>&list)
+int sFTPGE::getFilelistSFTP(string &basedir, vector<fileObject>&list)
 {
     int rc;
     fileSort sortFile;
@@ -269,7 +320,79 @@ int sFTPGE::getFilelist(string &basedir, vector<fileObject>&list)
     return 0;
 }
 
-int sFTPGE::getFile(string &filepath, stringstream &filemem)
+int fileIndex(char *file)
+{
+   int point = 0;
+   int startingPoint = 1;
+
+   for (int c=strlen(file)-startingPoint;c >-1; c--)
+   {
+       if (file[c] == '.')
+       {
+          point = c;
+          break;
+       }   
+   }
+
+   char number[10];
+   // cleaning the variables
+   for (int i=0; i<10; i++) number[i] = 0; 
+
+   for (int i=point+1; i<strlen(file); i++) number[i-point-1] = file[i];
+   return atoi(number);
+}
+
+int sFTPGE::indexExists(string &basedir, int indexToCheck, vector<fileObject>&list)
+{
+    DIR *dp;
+    char fname[512];
+    struct dirent *dirp;
+    if((dp  = opendir(basedir.c_str())) == NULL) {
+        cout << "Error(" << errno << ") opening " << basedir << endl;
+        return errno;
+    }
+    int inserted = 0;
+    while ((dirp = readdir(dp)) != NULL) 
+    {
+        if ((strcmp(dirp->d_name, ".") != 0) && (strcmp(dirp->d_name, "..") != 0))
+        {
+           if (dirp->d_type == DT_REG)
+           { 
+              int idx = fileIndex(dirp->d_name);
+              if (idx >= indexToCheck)
+              {
+                 struct stat attrs;
+                 sprintf(fname, "%s/%s", basedir.c_str(), dirp->d_name);
+                 stat(dirp->d_name, &attrs);
+                 inserted ++;
+                 if (list.size() < (idx-indexToCheck+1+lastListSize))
+                    list.resize(idx);
+                 list[idx-1].setFilename(dirp->d_name, testMode); 
+                 list[idx-1].time = (time_t) attrs.st_mtime;
+              } 
+           }
+        }
+    }
+    closedir(dp);
+    return 0;
+}
+
+int sFTPGE::updateFilelist(string &basedir, vector<fileObject>&list)
+{
+    int indexToCheck = list.size()+1;
+    lastListSize = list.size();
+    return indexExists(basedir, indexToCheck, list);
+}
+
+int sFTPGE::getFilelist(string &basedir, vector<fileObject>&list)
+{
+   if (mode == 1)
+      return updateFilelist(basedir, list);
+   else if (mode == 2)
+      return getFilelistSFTP(basedir, list);
+}
+
+int sFTPGE::getFileSFTP(string &filepath, stringstream &filemem)
 {
     /* Request a file via SFTP */
     int rc;
@@ -303,6 +426,28 @@ int sFTPGE::getFile(string &filepath, stringstream &filemem)
     
     libssh2_sftp_close(sftp_handle); 
     return 0;   
+}
+
+int sFTPGE::_getFile(string &filepath, stringstream &filemem)
+{
+    reset(filemem);
+    std::ifstream file(filepath, ios::binary );
+    if ( file )
+    {
+        filemem << file.rdbuf();
+        file.close();
+        int fileLen=filemem.tellg();
+        return 0;
+    }
+    else return -1;
+}
+
+int sFTPGE::getFile(string &filepath, stringstream &filemem)
+{
+   if (mode == 1) 
+      return _getFile(filepath, filemem);
+   else
+      return getFileSFTP(filepath, filemem);
 }
 
 int sFTPGE::saveFile(string &filepath, stringstream &filemem)
@@ -361,16 +506,6 @@ int sFTPGE::initSock()
     return 0;
 }
 
-int sFTPGE::connectSession()
-{
-    initWinsock();
-    initSSH();
-    initSock();
-    initSSHSession();
-    initsFTPSession();
-    
-    return 0;
-}
 
 int sFTPGE::initSSHSession()
 {
@@ -467,9 +602,21 @@ int sFTPGE::initsFTPSession()
     return 0;
 }
 
+int sFTPGE::connectSession()
+{
+    if (mode == 2)
+    {
+       initWinsock();
+       initSSH();
+       initSock();
+       initSSHSession();
+       initsFTPSession();
+    }
+    return 0;
+}
+
 int sFTPGE::hasNewFiles()
 {
-//   fprintf(stderr, "Lista atual = %ld, Anterior = %ld\n", list.size(), lastListSize);
    return (list.size()-lastListSize);
 }
 
@@ -490,7 +637,6 @@ int sFTPGE::getLatestExamDir()
 
 int sFTPGE::hasNewSeriesDir()
 {
-//   fprintf(stderr, "previousSerieDir = %s, actual = %s\n", previousSerieDir.c_str(), latestSerieDir.c_str());
    return (previousSerieDir != latestSerieDir);
 }
 
@@ -511,7 +657,8 @@ int sFTPGE::getFileList()
 {
     double ini = GetWallTime();
     lastListSize = list.size();
-    list.clear();
+    if (mode == 2) 
+       list.clear();
     getFilelist(latestSerieDir, list);
     double end = GetWallTime();
     logSeries.writeLog(1, "Time to get list %f sec\n", end-ini);
@@ -679,6 +826,7 @@ int sFTPGE::cleanUp()
    nSlices = 0;
    actualFileIndex = 0;
    lastIndexChecked = -1;
+   lastSliceListed = 0;
    resetTries(); 
    return 0;
 }
@@ -710,7 +858,7 @@ int sFTPGE::copyStep(string &outputdir)
    {
       getFileList();
       lastTime = GetWallTime();
-      if ((hasNewFiles()) && (actualFileIndex+nSlices < list.size()))
+      if ((hasNewFiles()) && (actualFileIndex+nSlices <= list.size()))
       {
          downloadFileList(outputdir);
       }
@@ -720,9 +868,11 @@ int sFTPGE::copyStep(string &outputdir)
 
 int sFTPGE::closeSession()
 {
-    closeSSH();
-    closeSock();
-    
+    if (mode == 2)
+    {
+       closeSSH();
+       closeSock();
+    }
     return 0;
 }
 

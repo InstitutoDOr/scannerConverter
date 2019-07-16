@@ -76,7 +76,7 @@ public:
         return 0;
     }
 
-    fileObject(char *file, int InTestMode)
+    void setFilename(char *file, int InTestMode)
     {
        testMode = InTestMode;
        filename = file;
@@ -114,6 +114,17 @@ public:
           fileIndex = atoi(number) * 1000 + atoi(number2);
        }
     }   
+
+    fileObject()
+    {
+       fileIndex = -1;
+    }
+
+    
+    fileObject(char *file, int InTestMode)
+    {
+       setFilename(file, InTestMode);
+    }
 };
 
 typedef struct
@@ -161,6 +172,8 @@ class sFTPGE
     double timeBetweenReads;
     double startTime;
     int lastIndexChecked;
+    int lastSliceListed;
+    int mode;
 
 public:
     char keyfile1[255];
@@ -177,8 +190,14 @@ public:
 
     string latestSession(string &basedir);
     string latestDir(string &basedir);
+    string _latestDir(string &basedir);
+    string latestDirSFTP(string &basedir);
+
     string latestSerie(string &sessionDir);
     int getFilelist(string &basedir, vector<fileObject>&list);
+    int updateFilelist(string &basedir, vector<fileObject>&list);
+    int getFilelistSFTP(string &basedir, vector<fileObject>&list);
+
     int saveFile(string &filepath, stringstream &filemem);
 
     int initWinsock();
@@ -189,6 +208,8 @@ public:
 
     int connectSession();
     int getFile(string &filepath, stringstream &filemem);
+    int _getFile(string &filepath, stringstream &filemem);
+    int getFileSFTP(string &filepath, stringstream &filemem);
     int downloadFileList(string &outputdir);
     int getFileList();
     int closeSock();
@@ -205,25 +226,31 @@ public:
     int cleanUp();
     void setStartTime();
     int saveNifti(char * niiFilename, struct nifti_1_header hdr, unsigned char* im, struct TDCMopts opts);
+    int indexExists(string &basedir, int indexToCheck, vector<fileObject>&list);
 
-    sFTPGE(int InTestMode)
+    sFTPGE(char *inputpath)
     {
-        testMode = InTestMode;
+        testMode = 0;
         strcpy(keyfile1, "");
         strcpy(keyfile2, "");
         
         username = "sdc";
         password = "adw2.0";
+        mode = 1; // directory search
         if (testMode) 
         {
-           sftppath = "/test_data";
            hostaddr = htonl(0x7F000001);
+           if (mode == 1)
+              sftppath = "/home/osboxes/Desktop/Stanford/rtfmri/test_data";
         }
         else
         {
-           sftppath = "/export/home1/sdc_image_pool/images";
            hostaddr = inet_addr("192.168.0.10");
-        } 
+           if (mode == 1)
+              sftppath = "/cnimr/images";
+        }
+        if (inputpath != NULL)
+           sftppath = inputpath; 
         
         auth_pw = 0;
 
@@ -241,6 +268,7 @@ public:
         timeBetweenReads = 0.1;  // 50 ms
         lastIndexChecked = -1;
         lastListSize = 0;
+        lastSliceListed = 0;
     }
 };
 
