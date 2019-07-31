@@ -6,7 +6,7 @@
 #  Created by Rede Dor on 05/09/18.
 #  
 
-g++ -w -O3 -DHAVE_ARPA_INET_H -DUSE_JPEGLS=ON -DmyDisableOpenJPEG \
+g++ -std=c++0x -w -O3 -DHAVE_ARPA_INET_H -DUSE_JPEGLS=ON -DmyDisableOpenJPEG \
      main.cpp sftp.cpp \
      memoryDCM.cpp \
      ../dcm2niix/console/ujpeg.cpp \

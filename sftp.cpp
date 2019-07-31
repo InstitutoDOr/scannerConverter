@@ -359,13 +359,13 @@ int sFTPGE::indexExists(string &basedir, int indexToCheck, vector<fileObject>&li
            if (dirp->d_type == DT_REG)
            { 
               int idx = fileIndex(dirp->d_name);
-              if (idx >= indexToCheck)
+              if ((idx >= indexToCheck) || ((idx < list.size()) && (list[idx-1].filename == "")) )
               {
                  struct stat attrs;
                  sprintf(fname, "%s/%s", basedir.c_str(), dirp->d_name);
                  stat(dirp->d_name, &attrs);
                  inserted ++;
-                 if (list.size() < (idx-indexToCheck+1+lastListSize))
+                 if (list.size() < idx)
                     list.resize(idx);
                  list[idx-1].setFilename(dirp->d_name, testMode); 
                  list[idx-1].time = (time_t) attrs.st_mtime;
@@ -431,13 +431,19 @@ int sFTPGE::getFileSFTP(string &filepath, stringstream &filemem)
 int sFTPGE::_getFile(string &filepath, stringstream &filemem)
 {
     reset(filemem);
+    struct stat attrs;
+    if (stat(filepath.c_str(), &attrs) !=0)
+       return -1;
+
     std::ifstream file(filepath, ios::binary );
     if ( file )
     {
         filemem << file.rdbuf();
         file.close();
+        filemem.seekg(0, filemem.end);
         int fileLen=filemem.tellg();
-        return 0;
+        if  (fileLen < 1024) return -1;
+        else return 0;
     }
     else return -1;
 }
@@ -726,6 +732,11 @@ int sFTPGE::downloadFileList(string &outputdir)
 
     for (int t=actualFileIndex; t<list.size(); t++)
     {
+        if (list[t].filename == "")
+        {
+           logSeries.writeLog(1, "Slice file with index %d not found\n", t+1); 
+           break;
+        }
         stringstream filemem;
         string fname = latestSerieDir + "/" + list[t].filename;
         if (getFile(fname, filemem)==0)
@@ -737,7 +748,7 @@ int sFTPGE::downloadFileList(string &outputdir)
                 if (headerDcm2Nii(d, &hdr, true) != EXIT_FAILURE)
                 {
                     imgsz = nii_ImgBytes(hdr);
-
+                    filemem.seekg(0, filemem.end);
                     int fileLen=filemem.tellg();
                     logSeries.writeLog(1, "filename = %s, file size = %d, slice size=%ld numslices = %d\n", fname.c_str(), fileLen, imgsz, d.locationsInAcquisition); 
 
@@ -800,7 +811,12 @@ int sFTPGE::downloadFileList(string &outputdir)
                     logSeries.flushLog();
                 }
             }
-        };
+        }
+        else 
+        {
+            logSeries.writeLog(1, "Slice file %s has invalid filesize\n", fname.c_str());
+            break;
+        }
     }
     if (img)
        free(img);
