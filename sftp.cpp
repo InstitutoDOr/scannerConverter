@@ -351,22 +351,22 @@ int sFTPGE::indexExists(string &basedir, int indexToCheck, vector<fileObject>&li
         cout << "Error(" << errno << ") opening " << basedir << endl;
         return errno;
     }
-    int inserted = 0;
     while ((dirp = readdir(dp)) != NULL) 
     {
         if ((strcmp(dirp->d_name, ".") != 0) && (strcmp(dirp->d_name, "..") != 0))
         {
-           if (dirp->d_type == DT_REG)
+           //if (dirp->d_type == DT_REG)
            { 
               int idx = fileIndex(dirp->d_name);
-              if ((idx >= indexToCheck) || ((idx < list.size()) && (list[idx-1].filename == "")) )
+              if (idx >= list.size())
+              {
+                 list.resize(idx);
+              }
+              if (list[idx-1].filename == "")
               {
                  struct stat attrs;
                  sprintf(fname, "%s/%s", basedir.c_str(), dirp->d_name);
-                 stat(dirp->d_name, &attrs);
-                 inserted ++;
-                 if (list.size() < idx)
-                    list.resize(idx);
+                 stat(fname, &attrs);
                  list[idx-1].setFilename(dirp->d_name, testMode); 
                  list[idx-1].time = (time_t) attrs.st_mtime;
               } 
@@ -756,7 +756,8 @@ int sFTPGE::downloadFileList(string &outputdir)
                     for (int i = 4; i < 8; i++) hdr.dim[i] = 0;
                     imgM = (unsigned char *)malloc(imgsz* (uint64_t)d.locationsInAcquisition);
                     img = (unsigned char *)malloc(imgsz);
-                    nSlices = d.locationsInAcquisition;
+                    if (d.locationsInAcquisition > 0) 
+                       nSlices = d.locationsInAcquisition;
                 }
             }
             
@@ -874,7 +875,7 @@ int sFTPGE::copyStep(string &outputdir)
    {
       getFileList();
       lastTime = GetWallTime();
-      if ((hasNewFiles()) && (actualFileIndex+nSlices <= list.size()))
+      if (actualFileIndex+nSlices <= list.size())
       {
          downloadFileList(outputdir);
       }
