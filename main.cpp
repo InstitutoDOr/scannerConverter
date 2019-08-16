@@ -70,11 +70,11 @@ int main(int argc, char *argv[])
     {
         if ((strcmp(dirp->d_name, ".") != 0) && (strcmp(dirp->d_name, "..") != 0))
         {
-           if (dirp->d_type == DT_DIR)
+           if ((dirp->d_type == DT_DIR) && (strstr(dirp->d_name, "serie") != NULL))
            { 
               char number[20];
               int p=0, q;
-              fprintf(stderr, "Directory seeing %s\n", dirp->d_name);
+              fprintf(stderr, "Seeing directory %s\n", dirp->d_name);
               while ((p < strlen(dirp->d_name)) && (!isdigit(dirp->d_name[p]))) p++;
               q = p;
               while ((p < strlen(dirp->d_name)) && (isdigit(dirp->d_name[p]))) 
